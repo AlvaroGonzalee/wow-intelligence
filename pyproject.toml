@@ -1,0 +1,13 @@
+[project]
+name = "wow-intelligence"
+version = "0.0.1"
+description = "Local assistant for World of Warcraft: Forever (development scaffold)."
+requires-python = ">=3.14,<3.15"
+dependencies = []
+
+[project.scripts]
+wow-intelligence = "wow_intelligence.__main__:main"
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"

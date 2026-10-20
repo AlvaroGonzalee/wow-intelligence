@@ -1,0 +1,39 @@
+# Python and environments
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.python-version.local
+
+# Build and quality tool output
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.log
+
+# Knowledge, chats, and model artifacts stay local
+/data/*
+!/data/.gitkeep
+/models/
+/.ollama/
+*.gguf
+*.safetensors
+*.sqlite
+*.sqlite3
+*.db
+/evals/results/
+
+# Operating system
+.DS_Store
+
+
