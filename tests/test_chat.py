@@ -3,9 +3,11 @@
 import io
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from importlib.metadata import version
 from unittest.mock import patch
 
 from wow_intelligence.chat import run_chat
+from wow_intelligence.config import OllamaConfig
 from wow_intelligence.instructions import AssistantInstructions
 from wow_intelligence.ollama import OllamaError
 
@@ -38,8 +40,18 @@ class ChatTests(unittest.TestCase):
         self.generate.assert_called_once_with([
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": "Hello"},
-        ])
+        ], model="qwen3:8b", base_url="http://127.0.0.1:11434", timeout=120.0)
         self.assertIn("Please ask your question in English.", self.output.getvalue())
+
+    def test_session_uses_supplied_settings_on_every_turn(self):
+        self.read_input.side_effect = ["Hello", "Second question", "/exit"]
+        self.generate.return_value = "Ready."
+        run_chat(OllamaConfig(model="other:8b", base_url="http://localhost:11435", timeout=30))
+        self.assertEqual(self.generate.call_count, 2)
+        for call in self.generate.call_args_list:
+            self.assertEqual(call.kwargs, {
+                "model": "other:8b", "base_url": "http://localhost:11435", "timeout": 30,
+            })
 
     def test_rejected_output_is_not_displayed_or_saved(self):
         self.read_input.side_effect = ["First", "Rejected", "Retry", "/exit"]
@@ -77,6 +89,36 @@ class ChatTests(unittest.TestCase):
         self.read_input.side_effect = ["  ", "/exit"]
         run_chat()
         self.generate.assert_not_called()
+
+    def test_help_and_version_run_locally_without_language_checks(self):
+        self.read_input.side_effect = [" /help ", " /version ", "/exit"]
+        run_chat()
+        self.generate.assert_not_called()
+        self.language_policy.is_english.assert_not_called()
+        output = self.output.getvalue()
+        self.assertIn("/help —", output)
+        self.assertIn("/version —", output)
+        self.assertIn("/exit —", output)
+        self.assertIn(f"WoW Intelligence {version('wow-intelligence')}", output)
+
+    def test_commands_preserve_conversation_without_entering_history(self):
+        self.read_input.side_effect = ["Hello", "/help", "/version", "/unknown", "Second question", "/exit"]
+        self.generate.side_effect = ["Ready.", "Second answer."]
+        run_chat()
+        self.assertEqual(self.generate.call_count, 2)
+        self.assertEqual(self.generate.call_args_list[1].args[0], [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Ready."},
+            {"role": "user", "content": "Second question"},
+        ])
+
+    def test_unknown_commands_show_help_hint_without_contacting_provider(self):
+        self.read_input.side_effect = ["/sources", "/help extra", "/unknown", "/exit"]
+        run_chat()
+        self.generate.assert_not_called()
+        self.language_policy.is_english.assert_not_called()
+        self.assertEqual(self.output.getvalue().count("Unknown command."), 3)
 
     def test_questions_include_previous_successful_turns(self):
         self.read_input.side_effect = [" Hello ", "Second question", "/exit"]

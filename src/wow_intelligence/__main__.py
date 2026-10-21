@@ -4,6 +4,7 @@ import argparse
 from importlib.metadata import version
 
 from wow_intelligence.chat import run_chat
+from wow_intelligence.config import OllamaConfig
 
 
 def main() -> None:
@@ -18,7 +19,11 @@ def main() -> None:
         version=f"WoW Intelligence {version('wow-intelligence')}",
     )
     parser.parse_args()
-    run_chat()
+    try:
+        config = OllamaConfig.from_env()
+    except ValueError as exc:
+        parser.error(str(exc))
+    run_chat(config)
 
 
 if __name__ == "__main__":
