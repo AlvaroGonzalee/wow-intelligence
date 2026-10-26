@@ -1,16 +1,12 @@
-"""Exercise the installed offline detector with representative chat messages."""
-
 import unittest
 
 from wow_intelligence.language import EnglishLanguagePolicy
 
 
 class EnglishLanguagePolicyTests(unittest.TestCase):
-    """Check English, non-English, mixed, and ambiguous inputs with real Lingua."""
-
     @classmethod
+    # Check English, non-English, mixed, and ambiguous inputs with real Lingua.
     def setUpClass(cls):
-        """Reuse one detector for the entire language test suite."""
         cls.policy = EnglishLanguagePolicy()
 
     def test_accepts_english_with_game_names_and_numbers(self):

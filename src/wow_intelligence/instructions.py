@@ -1,5 +1,3 @@
-"""Define assistant behavior independently of terminal and HTTP communication."""
-
 from dataclasses import dataclass
 
 from wow_intelligence.ollama import Message
@@ -7,12 +5,7 @@ from wow_intelligence.ollama import Message
 
 @dataclass(frozen=True)
 class AssistantInstructions:
-    """Group the assistant's rules and build a fresh system message per session.
-
-    These instructions guide the model. They do not detect language, verify
-    evidence, browse sources, or guarantee that a generated answer follows them.
-    """
-
+    # Group the assistant's rules and build a fresh system message per session.
     language_rules: str = (
         "This chat accepts English input and produces English output only. "
         "If the user's message is not in English, reply exactly: "
@@ -43,7 +36,6 @@ class AssistantInstructions:
     )
 
     def system_message(self) -> Message:
-        """Combine rule groups into a new message without exposing shared mutable state."""
         return {
             "role": "system",
             "content": "\n".join((

@@ -1,5 +1,3 @@
-"""Test source admission and evidence eligibility using fictional records only."""
-
 import unittest
 from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timezone
@@ -8,10 +6,8 @@ from wow_intelligence.sources import Evidence, Source
 
 
 class SourceTests(unittest.TestCase):
-    """Keep source registration separate from permission to use its content."""
-
+    # Keep source registration separate from permission to use its content.
     def setUp(self):
-        """Create a fictional source with conservative defaults."""
         self.source = Source(
             source_id="sample-source", name="Fictional test source",
             url="https://example.invalid/source", game_version="forever",
@@ -64,10 +60,8 @@ class SourceTests(unittest.TestCase):
 
 
 class EvidenceTests(unittest.TestCase):
-    """Require traceability, explicit verification, and matching game context."""
-
+    # Require traceability, explicit verification, and matching game context.
     def setUp(self):
-        """Build a fictional verified record, not a real claim about WoW."""
         self.timestamp = datetime(2026, 10, 21, tzinfo=timezone.utc)
         self.source = Source(
             source_id="sample-source", name="Fictional test source",

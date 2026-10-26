@@ -1,5 +1,3 @@
-"""Load and validate Ollama connection settings without reading local files."""
-
 import math
 import os
 from collections.abc import Mapping
@@ -9,18 +7,12 @@ from urllib.parse import urlsplit
 
 @dataclass(frozen=True)
 class OllamaConfig:
-    """Hold connection settings shared by every request in one chat session.
-
-    Context size, output length, and thinking remain fixed in the provider:
-    the conversation budget has only been designed for those limits.
-    """
-
+    # Hold connection settings shared by every request in one chat session.
     base_url: str = "http://127.0.0.1:11434"
     model: str = "qwen3:8b"
     timeout: float = 120.0
 
     def __post_init__(self) -> None:
-        """Reject invalid settings before a session can send any messages."""
         if not isinstance(self.base_url, str) or any(
             character.isspace() for character in self.base_url
         ):
@@ -52,11 +44,6 @@ class OllamaConfig:
 
     @classmethod
     def from_env(cls, environ: Mapping[str, str] | None = None) -> "OllamaConfig":
-        """Read supported process variables once, using defaults only if absent.
-
-        Do not load .env files or change the process environment. An explicit
-        mapping lets tests and other callers load settings without global state.
-        """
         values = os.environ if environ is None else environ
         defaults = cls()
         try:

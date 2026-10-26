@@ -1,34 +1,32 @@
-"""Manage terminal interaction and temporary conversation history.
-
-Each run_chat invocation owns its history and never saves it to disk.
-Model communication is delegated to ollama.py.
-"""
-
 import sys
 from importlib.metadata import version
 
 from wow_intelligence.config import OllamaConfig
+from wow_intelligence.conversation import ConversationPolicy
+from wow_intelligence.domain import WoWDomainPolicy
 from wow_intelligence.instructions import AssistantInstructions
 from wow_intelligence.language import EnglishLanguagePolicy
 from wow_intelligence.ollama import Message, OllamaError, generate
+from wow_intelligence.rag import RagPipeline
+from wow_intelligence.rag.context import ABSTENTION, RagAnswer, answer_schema, parse_answer
 
 
-def run_chat(config: OllamaConfig | None = None) -> None:
-    """Read English questions and retain turns with an accepted English response.
-
-    Each request includes previous messages and the new question. Build a new
-    list to preserve confirmed history if Ollama fails. The initial system
-    message carries the assistant's instructions and stays first on every turn.
-    Language checks run before contacting Ollama and before saving its response.
-    Slash commands run locally and never enter the conversation history.
-    /exit, Ctrl+C, and end of input discard the session history.
-    """
+def run_chat(config: OllamaConfig | None = None, *, rag: RagPipeline | None = None) -> None:
     config = config if config is not None else OllamaConfig()
     history: list[Message] = [AssistantInstructions().system_message()]
     language_policy = EnglishLanguagePolicy()
+    domain_policy = WoWDomainPolicy()
+    last_rag_answer = RagAnswer(ABSTENTION)
+    rag_topic_available = False
     print("WoW Intelligence — experimental terminal chat")
     print("Conversation context lasts for this session only; nothing is saved to disk.")
-    print("Context is limited. Answers are not verified against sources.")
+    if rag is None:
+        print("Context is limited. Answers are not verified against sources.")
+    else:
+        print(f"RAG enabled for Forever build {rag.game_build}. Context is limited.")
+        if rag.include_catalog:
+            print("Source catalog mode: beta data, not independently verified in game.")
+        print("Citations identify retrieved evidence; generated claims still need review.")
     print("Type /help for commands, /exit to leave, or press Ctrl+C.")
     print("English only. Ambiguous input may require a complete English sentence.")
 
@@ -44,32 +42,80 @@ def run_chat(config: OllamaConfig | None = None) -> None:
                 print("/help — Show this help.")
                 print("/version — Show the application version.")
                 print("/exit — End the session and discard its history.")
+                if rag is not None:
+                    print("/sources — Show citations from the last accepted answer.")
+                    print("/coverage — Show loaded evidence and build coverage.")
                 print("History stays in memory for this session only. Context is limited.")
-                print("Answers are not verified against sources.")
+                if rag is None:
+                    print("Answers are not verified against sources.")
+                else:
+                    print("Name the subject of your question. Follow-ups can use the previous topic.")
                 continue
             if prompt == "/version":
                 print(f"WoW Intelligence {version('wow-intelligence')}")
+                continue
+            if prompt == "/sources" and rag is not None:
+                print(last_rag_answer.sources_text())
+                continue
+            if prompt == "/coverage" and rag is not None:
+                print(rag.coverage_text())
                 continue
             if prompt.startswith("/"):
                 print("Unknown command. Type /help for available commands.")
                 continue
             if not language_policy.is_english(prompt):
+                rag_topic_available = False
                 print(language_policy.input_rejection)
+                continue
+            if rag is not None:
+                local_reply = ConversationPolicy.local_reply(prompt)
+                if local_reply is not None:
+                    last_rag_answer = RagAnswer(local_reply)
+                    print(f"Assistant: {local_reply}")
+                    continue
+                if ConversationPolicy.needs_context(prompt) and not rag_topic_available:
+                    print("Assistant: Which item, quest, class, or location do you mean?")
+                    last_rag_answer = RagAnswer(ABSTENTION)
+                    continue
+            previous_question = next(
+                (message["content"] for message in reversed(history) if message["role"] == "user"),
+                "",
+            )
+            if domain_policy.is_clearly_unrelated(prompt, previous_question):
+                rag_topic_available = False
+                print(domain_policy.input_rejection)
                 continue
             messages: list[Message] = [*history, {"role": "user", "content": prompt}]
             try:
+                prepared = rag.prepare(history, prompt) if rag is not None else None
+                if prepared is not None and not prepared.evidence:
+                    rag_topic_available = False
+                    last_rag_answer = RagAnswer(ABSTENTION)
+                    print(f"Assistant: {ABSTENTION}")
+                    continue
                 answer = generate(
-                    messages, model=config.model,
+                    prepared.messages if prepared is not None else messages, model=config.model,
                     base_url=config.base_url, timeout=config.timeout,
+                    **({"response_schema": answer_schema(prepared.evidence)} if prepared is not None else {}),
                 )
+                rag_answer = parse_answer(answer, prepared.evidence) if prepared is not None else None
+                if rag_answer is not None:
+                    answer = rag_answer.text
             except OllamaError as exc:
+                rag_topic_available = False
                 print(f"Error: {exc}", file=sys.stderr)
                 continue
             if not language_policy.is_english(answer):
+                rag_topic_available = False
                 print(language_policy.output_rejection)
                 continue
             history = [*messages, {"role": "assistant", "content": answer}]
             print(f"Assistant: {answer}")
+            if rag_answer is not None:
+                rag_topic_available = bool(rag_answer.evidence)
+                last_rag_answer = rag_answer
+                if rag_answer.evidence:
+                    print(rag_answer.sources_text())
     except (EOFError, KeyboardInterrupt):
         print()
 

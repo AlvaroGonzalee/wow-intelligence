@@ -1,26 +1,23 @@
-"""Handle HTTP communication with Ollama and validate model responses.
-
-Session management and WoW policies belong to the chat interface and the
-future knowledge layer, respectively.
-"""
-
 import json
 from typing import Literal, TypedDict
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
+INPUT_BUDGET = 3000
+
+
+def message_size(messages: list["Message"]) -> int:
+    return sum(len(message["content"].encode("utf-8")) + 64 for message in messages)
+
+
 class OllamaError(Exception):
-    """Report a connection failure, invalid response, or context budget overflow."""
+    # Report a connection failure, invalid response, or context budget overflow.
+    pass
 
 
 class Message(TypedDict):
-    """Describe the author and content of a message sent to the model.
-
-    TypedDict provides type hints for a dictionary. It does not maintain state
-    or automatically validate values at runtime.
-    """
-
+    # Describe the author and content of a message sent to the model.
     role: Literal["system", "user", "assistant"]
     content: str
 
@@ -31,19 +28,8 @@ def generate(
     model: str = "qwen3:8b",
     base_url: str = "http://127.0.0.1:11434",
     timeout: float = 120,
+    response_schema: dict | None = None,
 ) -> str:
-    """Send the full conversation to /api/chat and return the assistant's text.
-
-    Leave the supplied list unchanged. Reject oversized histories before
-    connecting rather than dropping earlier messages. The UTF-8 byte budget
-    plus per-message overhead is a conservative approximation for Qwen3 with
-    a 4096-token context, not an exact tokenizer. It reserves room for the chat
-    template and 512 output tokens. Revisit this budget if the model or context
-    size changes.
-
-    Raise ValueError for invalid arguments and OllamaError for request failures,
-    histories exceeding the budget, or unusable responses.
-    """
     if not isinstance(messages, list) or not messages:
         raise ValueError("Messages must be a non-empty list.")
     for message in messages:
@@ -56,11 +42,11 @@ def generate(
             raise ValueError("Each message must have a valid role and non-empty text.")
     if timeout <= 0:
         raise ValueError("Timeout must be greater than zero.")
+    if response_schema is not None and (not isinstance(response_schema, dict) or not response_schema):
+        raise ValueError("Response schema must be a non-empty JSON schema object.")
 
-    # Bound input without trimming history. Count multibyte characters by their
-    # UTF-8 size and allow overhead for the chat template on each message.
-    input_budget = sum(len(message["content"].encode("utf-8")) + 64 for message in messages)
-    if input_budget > 3000:
+
+    if message_size(messages) > INPUT_BUDGET:
         raise OllamaError(
             "The conversation is too long for the current context budget. "
             "No messages were removed. Exit and start a new session."
@@ -74,6 +60,9 @@ def generate(
         "keep_alive": "5m",
         "options": {"num_ctx": 4096, "num_predict": 512},
     }
+    if response_schema is not None:
+        payload["format"] = response_schema
+        payload["options"]["temperature"] = 0
     request = Request(
         f"{base_url.rstrip('/')}/api/chat",
         data=json.dumps(payload).encode("utf-8"),

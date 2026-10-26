@@ -1,5 +1,3 @@
-"""Test conversation payloads and HTTP errors without connecting to Ollama."""
-
 import io
 import json
 import unittest
@@ -10,9 +8,8 @@ from wow_intelligence.ollama import OllamaError, generate
 
 
 class GenerateTests(unittest.TestCase):
-    """Verify provider requests and error handling without a running server."""
+    # Verify provider requests and error handling without a running server.
     def reply(self, payload: object) -> io.BytesIO:
-        """Create a simulated HTTP response with a JSON body."""
         return io.BytesIO(json.dumps(payload).encode("utf-8"))
 
     @patch("wow_intelligence.ollama.urlopen")

@@ -16,6 +16,7 @@ dist/
 htmlcov/
 
 # Local configuration and secrets
+.vscode/
 .env
 .env.*
 !.env.example

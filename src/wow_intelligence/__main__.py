@@ -1,14 +1,12 @@
-"""Parse command-line arguments and launch the terminal chat."""
-
 import argparse
 from importlib.metadata import version
 
 from wow_intelligence.chat import run_chat
 from wow_intelligence.config import OllamaConfig
+from wow_intelligence.rag import RagPipeline, load_corpus
 
 
 def main() -> None:
-    """Show help or version information when requested; otherwise start a session."""
     parser = argparse.ArgumentParser(
         prog="wow-intelligence",
         description="Experimental terminal chat using local Ollama.",
@@ -18,12 +16,31 @@ def main() -> None:
         action="version",
         version=f"WoW Intelligence {version('wow-intelligence')}",
     )
-    parser.parse_args()
+    parser.add_argument("--corpus", metavar="PATH", help="Load a reviewed local JSON corpus and enable RAG.")
+    parser.add_argument("--game-build", metavar="BUILD", help="Override the newest numeric build recorded in the corpus.")
+    parser.add_argument("--check-corpus", action="store_true", help="Validate the corpus and report eligible evidence, then exit.")
+    parser.add_argument("--include-catalog", action="store_true", help="Allow explicitly labelled source catalog facts; these are not independently verified in game.")
+    args = parser.parse_args()
+    if args.include_catalog and not args.corpus:
+        parser.error("--include-catalog requires --corpus.")
+    if args.game_build and not args.corpus:
+        parser.error("--game-build requires --corpus.")
+    if args.check_corpus and not args.corpus:
+        parser.error("--check-corpus requires --corpus.")
     try:
+        rag = RagPipeline(load_corpus(args.corpus), args.game_build, include_catalog=args.include_catalog) if args.corpus else None
+        if args.check_corpus:
+            print(f"Corpus is valid. Eligible evidence for build {rag.game_build}: {len(rag.retriever.evidence)}.")
+            print(rag.coverage_text())
+            print("Metadata validation does not independently verify facts or permissions.")
+            return
         config = OllamaConfig.from_env()
     except ValueError as exc:
         parser.error(str(exc))
-    run_chat(config)
+    if rag is None:
+        run_chat(config)
+    else:
+        run_chat(config, rag=rag)
 
 
 if __name__ == "__main__":

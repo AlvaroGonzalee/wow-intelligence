@@ -1,5 +1,3 @@
-"""Test session history and terminal interaction with a simulated Ollama provider."""
-
 import io
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -16,9 +14,8 @@ SYSTEM_PROMPT = AssistantInstructions().system_message()["content"]
 
 
 class ChatTests(unittest.TestCase):
-    """Verify session history, error handling, and clean terminal exits."""
+    # Verify session history, error handling, and clean terminal exits.
     def setUp(self):
-        """Simulate input, output, and the provider to isolate each test."""
         self.output = io.StringIO()
         self.errors = io.StringIO()
         self.enterContext(redirect_stdout(self.output))
@@ -52,6 +49,40 @@ class ChatTests(unittest.TestCase):
             self.assertEqual(call.kwargs, {
                 "model": "other:8b", "base_url": "http://localhost:11435", "timeout": 30,
             })
+
+    def test_unrelated_input_is_rejected_without_changing_history(self):
+        self.read_input.side_effect = [
+            "I play a Rogue in WoW.", "What is the weather in Madrid?",
+            "What level am I?", "/exit",
+        ]
+        self.generate.return_value = "Please tell me your level."
+        run_chat()
+        self.assertEqual(self.generate.call_count, 2)
+        self.assertIn("I can only help with World of Warcraft: Forever.", self.output.getvalue())
+        self.assertEqual(self.generate.call_args_list[1].args[0], [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": "I play a Rogue in WoW."},
+            {"role": "assistant", "content": "Please tell me your level."},
+            {"role": "user", "content": "What level am I?"},
+        ])
+
+    def test_game_context_allows_calculation_followup(self):
+        self.read_input.side_effect = [
+            "These items cost 4 gold each.", "Calculate 25 times 4.", "/exit",
+        ]
+        self.generate.return_value = "Ready."
+        run_chat()
+        self.assertEqual(self.generate.call_count, 2)
+        self.assertEqual(self.generate.call_args.args[0][-1]["content"], "Calculate 25 times 4.")
+
+    def test_failed_game_turn_does_not_supply_calculation_context(self):
+        self.read_input.side_effect = [
+            "These items cost 4 gold each.", "Calculate 25 times 4.", "/exit",
+        ]
+        self.generate.side_effect = OllamaError("Offline")
+        run_chat()
+        self.generate.assert_called_once()
+        self.assertIn("I can only help with World of Warcraft: Forever.", self.output.getvalue())
 
     def test_rejected_output_is_not_displayed_or_saved(self):
         self.read_input.side_effect = ["First", "Rejected", "Retry", "/exit"]

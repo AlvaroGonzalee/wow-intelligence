@@ -1,5 +1,3 @@
-"""Check that sessions receive independent system messages."""
-
 import unittest
 from dataclasses import FrozenInstanceError
 
@@ -7,8 +5,7 @@ from wow_intelligence.instructions import AssistantInstructions
 
 
 class AssistantInstructionsTests(unittest.TestCase):
-    """Protect instruction configuration and prevent shared message mutations."""
-
+    # Protect instruction configuration and prevent shared message mutations.
     def test_modifying_one_message_does_not_change_future_sessions(self):
         instructions = AssistantInstructions()
         message = instructions.system_message()

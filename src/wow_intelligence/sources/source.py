@@ -1,5 +1,3 @@
-#Define a source and its documented permission status
-
 from dataclasses import dataclass
 from typing import Literal
 
@@ -11,13 +9,7 @@ PermissionStatus = Literal["pending_review", "approved", "rejected"]
 
 @dataclass(frozen=True)
 class Source:
-    """Identify a source and record an explicit decision about permitted use.
-
-    Sources start pending and disabled. Approval requires a reference to the
-    permission review, such as an internal decision record. An approved source
-    may stay disabled, and its contents still need independent verification.
-    """
-
+    # Identify a source and record an explicit decision about permitted use.
     source_id: str
     name: str
     url: str
@@ -27,7 +19,6 @@ class Source:
     enabled: bool = False
 
     def __post_init__(self) -> None:
-        #Prevent incomplete registration and enabling an unapproved source
         for field in ("source_id", "name", "game_version"):
             _require_text(getattr(self, field), field)
         _require_url(self.url, "url")

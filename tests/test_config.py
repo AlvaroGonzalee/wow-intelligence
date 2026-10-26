@@ -1,5 +1,3 @@
-"""Test environment settings and startup failures without contacting Ollama."""
-
 import io
 import os
 import unittest
@@ -11,8 +9,7 @@ from wow_intelligence.config import OllamaConfig
 
 
 class OllamaConfigTests(unittest.TestCase):
-    """Verify defaults, explicit overrides, and invalid configuration rejection."""
-
+    # Verify defaults, explicit overrides, and invalid configuration rejection.
     def test_absent_variables_use_defaults(self):
         self.assertEqual(OllamaConfig.from_env({}), OllamaConfig())
 
@@ -79,11 +76,14 @@ class OllamaConfigTests(unittest.TestCase):
         run_chat.assert_not_called()
 
     @patch("wow_intelligence.__main__.run_chat")
-    @patch.dict(os.environ, {"OLLAMA_TIMEOUT": "invalid"}, clear=True)
     def test_help_and_version_work_with_invalid_configuration(self, run_chat):
         for argument in ("--help", "--version"):
             with self.subTest(argument=argument), patch("sys.argv", ["wow-intelligence", argument]):
-                with patch("sys.stdout", new_callable=io.StringIO), self.assertRaises(SystemExit) as raised:
+                with (
+                    patch.dict(os.environ, {"OLLAMA_TIMEOUT": "invalid"}, clear=True),
+                    patch("sys.stdout", new_callable=io.StringIO),
+                    self.assertRaises(SystemExit) as raised,
+                ):
                     main()
                 self.assertEqual(raised.exception.code, 0)
         run_chat.assert_not_called()
