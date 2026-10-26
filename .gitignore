@@ -19,7 +19,6 @@ htmlcov/
 .vscode/
 .env
 .env.*
-!.env.example
 *.log
 
 # Knowledge, chats, and model artifacts stay local
@@ -36,5 +35,6 @@ htmlcov/
 
 # Operating system
 .DS_Store
+
 
 
