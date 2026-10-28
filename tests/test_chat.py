@@ -1,13 +1,13 @@
-import io
-import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from importlib.metadata import version
 from unittest.mock import patch
+import io
+import unittest
 
-from wow_intelligence.chat import run_chat
-from wow_intelligence.config import OllamaConfig
-from wow_intelligence.instructions import AssistantInstructions
-from wow_intelligence.ollama import OllamaError
+from wow_intelligence.chat.prompts import AssistantInstructions
+from wow_intelligence.chat.terminal import run_chat
+from wow_intelligence.config.ollama import OllamaConfig
+from wow_intelligence.ollama.errors import OllamaError
 
 
 SYSTEM_PROMPT = AssistantInstructions().system_message()["content"]
@@ -21,9 +21,9 @@ class ChatTests(unittest.TestCase):
         self.enterContext(redirect_stdout(self.output))
         self.enterContext(redirect_stderr(self.errors))
         self.read_input = self.enterContext(patch("builtins.input"))
-        self.generate = self.enterContext(patch("wow_intelligence.chat.generate"))
+        self.generate = self.enterContext(patch('wow_intelligence.chat.terminal.generate'))
         self.language_policy = self.enterContext(
-            patch("wow_intelligence.chat.EnglishLanguagePolicy")
+            patch('wow_intelligence.chat.terminal.EnglishLanguagePolicy')
         ).return_value
         self.language_policy.is_english.return_value = True
         self.language_policy.input_rejection = "Please ask your question in English."

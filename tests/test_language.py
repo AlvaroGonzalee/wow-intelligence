@@ -1,6 +1,6 @@
 import unittest
 
-from wow_intelligence.language import EnglishLanguagePolicy
+from wow_intelligence.chat.policies.language import EnglishLanguagePolicy
 
 
 class EnglishLanguagePolicyTests(unittest.TestCase):

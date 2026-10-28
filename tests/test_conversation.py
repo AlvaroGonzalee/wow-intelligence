@@ -1,6 +1,6 @@
 import unittest
 
-from wow_intelligence.conversation import ConversationPolicy
+from wow_intelligence.chat.policies.conversation import ConversationPolicy
 
 
 class ConversationTests(unittest.TestCase):

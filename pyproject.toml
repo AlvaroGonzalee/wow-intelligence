@@ -8,11 +8,16 @@ dependencies = [
 ]
 
 [project.scripts]
-wow-intelligence = "wow_intelligence.__main__:main"
+wow-intelligence = "wow_intelligence.cli.chat:main"
 
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "wow_intelligence"
+module-root = "src"
+namespace = true
 
 [dependency-groups]
 dev = [

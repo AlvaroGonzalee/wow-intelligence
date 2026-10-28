@@ -1,18 +1,20 @@
-import io
 from contextlib import closing
-import json
+from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
+import io
+import json
 import sqlite3
 import struct
 import tempfile
 import unittest
-from dataclasses import replace
-from unittest.mock import patch
 
-from wow_intelligence.ollama import OllamaError
-from wow_intelligence.rag import RagPipeline, load_corpus
-from wow_intelligence.rag.embedder import OllamaEmbedder, normalized_vector
-from wow_intelligence.rag.vectorstore import VectorIndex, build_index
+from wow_intelligence.ollama.embeddings import OllamaEmbedder
+from wow_intelligence.ollama.errors import OllamaError
+from wow_intelligence.rag.indexing.vector_index import VectorIndex, build_index
+from wow_intelligence.rag.indexing.vectors import normalized_vector
+from wow_intelligence.rag.pipeline import RagPipeline
+from wow_intelligence.rag.storage.json_loader import load_knowledge_base
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json"
@@ -29,7 +31,7 @@ class FakeEmbedder:
 
 class EmbedderTests(unittest.TestCase):
     # Validate transport, model identity and numeric safety without network.
-    @patch("wow_intelligence.rag.embedder.urlopen")
+    @patch('wow_intelligence.ollama.embeddings.urlopen')
     def test_batches_use_no_truncation_and_normalize_vectors(self, request):
         request.side_effect = [
             io.BytesIO(json.dumps({"models": [{"name": "test:latest", "digest": "abc", "capabilities": ["embedding"]}]}).encode()),
@@ -43,7 +45,7 @@ class EmbedderTests(unittest.TestCase):
         self.assertEqual(embedder.identity["digest"], "abc")
         self.assertEqual(request.call_count, 2)
 
-    @patch("wow_intelligence.rag.embedder.urlopen")
+    @patch('wow_intelligence.ollama.embeddings.urlopen')
     def test_missing_or_chat_only_models_fail_without_downloads(self, request):
         for models in ([], [{"name": "test", "digest": "abc", "capabilities": ["completion"]}]):
             request.reset_mock()
@@ -63,7 +65,7 @@ class EmbedderTests(unittest.TestCase):
             with self.subTest(texts=texts), self.assertRaises(ValueError):
                 OllamaEmbedder("test").embed(texts)
 
-    @patch("wow_intelligence.rag.embedder.urlopen")
+    @patch('wow_intelligence.ollama.embeddings.urlopen')
     def test_rejects_wrong_embedding_count(self, request):
         request.return_value = io.BytesIO(b'{"embeddings":[]}')
         embedder = OllamaEmbedder("test")
@@ -77,15 +79,15 @@ class VectorIndexTests(unittest.TestCase):
     def setUp(self):
         self.folder = self.enterContext(tempfile.TemporaryDirectory())
         self.path = Path(self.folder) / "index.sqlite3"
-        self.corpus = load_corpus(FIXTURE)
-        self.evidence = RagPipeline(self.corpus, "test-build").retriever.evidence
+        self.knowledge_base = load_knowledge_base(FIXTURE)
+        self.evidence = RagPipeline(self.knowledge_base, "test-build").retriever.evidence
         self.embedder = FakeEmbedder()
 
     def test_round_trip_and_hybrid_retrieval_without_keyword_overlap(self):
         build_index(self.path, self.evidence, self.embedder)
         index = VectorIndex(self.path, self.evidence, self.embedder.identity)
         self.assertEqual(index.search([1, 0]), ("amber-token",))
-        pipeline = RagPipeline(self.corpus, "test-build", index_path=self.path, embedder=self.embedder)
+        pipeline = RagPipeline(self.knowledge_base, "test-build", index_path=self.path, embedder=self.embedder)
         self.assertEqual(pipeline.retrieval_mode, "hybrid")
         self.assertEqual(pipeline.retriever.search("azure repository")[0].evidence_id, "amber-token")
         self.assertNotIn("amber-other-build", index.vectors)
@@ -129,15 +131,15 @@ class VectorIndexTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_index(self.path, (), self.embedder)
         with self.assertRaises(ValueError):
-            RagPipeline(self.corpus, "test-build", embedder=self.embedder)
+            RagPipeline(self.knowledge_base, "test-build", embedder=self.embedder)
         with self.assertRaises(ValueError):
-            RagPipeline(self.corpus, "test-build", index_path=self.path)
+            RagPipeline(self.knowledge_base, "test-build", index_path=self.path)
 
     def test_index_command_selects_only_eligible_evidence(self):
-        from wow_intelligence.rag.index import main
+        from wow_intelligence.cli.build_index import main
         with patch("sys.argv", ["index", "--corpus", str(FIXTURE), "--game-build", "test-build",
                                 "--embedding-model", "fictional-model", "--output", str(self.path)]):
-            with patch("wow_intelligence.rag.index.OllamaEmbedder", return_value=self.embedder):
+            with patch('wow_intelligence.cli.build_index.OllamaEmbedder', return_value=self.embedder):
                 with patch("sys.stdout", new_callable=io.StringIO):
                     main()
         index = VectorIndex(self.path, self.evidence, self.embedder.identity)

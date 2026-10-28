@@ -1,23 +1,25 @@
 from dataclasses import replace
 from pathlib import Path
-import unittest
 from unittest.mock import Mock
+import unittest
 
-from wow_intelligence.language import EnglishLanguagePolicy
-from wow_intelligence.rag import Corpus, RagPipeline, load_corpus
-from wow_intelligence.rag.catalog_facts import catalog_answer
+from wow_intelligence.chat.policies.language import EnglishLanguagePolicy
+from wow_intelligence.rag.generation.catalog_answers import catalog_answer
+from wow_intelligence.rag.models.knowledge_base import KnowledgeBase
+from wow_intelligence.rag.pipeline import RagPipeline
+from wow_intelligence.rag.storage.json_loader import load_knowledge_base
 
 
 class CatalogFactsTests(unittest.TestCase):
     # Answer catalog fields from cited records without asking the LLM to guess.
     def setUp(self):
-        corpus = load_corpus(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json")
-        self.first = replace(corpus.evidence[0], url="https://example.invalid/items/123-first",
+        knowledge_base = load_knowledge_base(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json")
+        self.first = replace(knowledge_base.evidence[0], url="https://example.invalid/items/123-first",
                              status="source_reported", verified_at=None,
                              content="Fictional items catalog reports name: Amber Token; quality: epic; item level: 71; required level: 60; class: Armor; subclass: Leather (419). Missing fields are unknown.")
         self.second = replace(self.first, evidence_id="second", url="https://example.invalid/items/456-second",
                               content=self.first.content.replace("Amber Token", "Matriarch Quiver").replace("level: 60", "level: 35"))
-        self.pipeline = RagPipeline(Corpus(corpus.sources, (self.first, self.second)), "test-build", include_catalog=True)
+        self.pipeline = RagPipeline(KnowledgeBase(knowledge_base.sources, (self.first, self.second)), "test-build", include_catalog=True)
 
     def test_quality_and_item_level_are_extracted_without_generated_adjectives(self):
         for question, expected in (("How rare is Amber Token?", "quality: epic"),

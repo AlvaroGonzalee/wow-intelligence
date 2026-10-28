@@ -1,13 +1,15 @@
+from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
 import hashlib
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
-from pathlib import Path
-from unittest.mock import patch
 
-from wow_intelligence.rag import RagPipeline, load_corpus
-from wow_intelligence.sources.ahledger import ImportError, item_corpus, write_review_bundle
+from wow_intelligence.rag.ingestion.ahledger.common import ImportError
+from wow_intelligence.rag.ingestion.ahledger.items import item_corpus, write_review_bundle
+from wow_intelligence.rag.pipeline import RagPipeline
+from wow_intelligence.rag.storage.json_loader import load_knowledge_base
 
 
 class AhledgerTests(unittest.TestCase):
@@ -27,8 +29,8 @@ class AhledgerTests(unittest.TestCase):
     def test_import_preserves_raw_data_attribution_and_unknowns(self):
         raw = json.dumps(self.payload).encode()
         path = write_review_bundle(raw, self.output, self.now, expected_id=123)
-        corpus = load_corpus(path)
-        item = corpus.evidence[0]
+        knowledge_base = load_knowledge_base(path)
+        item = knowledge_base.evidence[0]
         self.assertEqual(item.status, "unverified_for_forever")
         self.assertIsNone(item.game_build)
         self.assertIsNone(item.verified_at)
@@ -38,7 +40,7 @@ class AhledgerTests(unittest.TestCase):
         self.assertEqual((self.output / "raw.json").read_bytes(), raw)
         review = json.loads((self.output / "review.json").read_text())
         self.assertEqual(review["sha256"], hashlib.sha256(raw).hexdigest())
-        self.assertEqual(RagPipeline(corpus, "test-build").retriever.evidence, ())
+        self.assertEqual(RagPipeline(knowledge_base, "test-build").retriever.evidence, ())
 
     def test_remote_fields_cannot_approve_evidence_or_supply_a_build(self):
         self.payload.update(game_build="123", status="verified_for_forever", verified_at=self.now.isoformat())
@@ -72,5 +74,5 @@ class AhledgerTests(unittest.TestCase):
         self.assertFalse(self.output.exists())
 
     def test_size_limit_is_enforced(self):
-        with patch("wow_intelligence.sources.ahledger.MAX_RESPONSE_BYTES", 2), self.assertRaises(ImportError):
+        with patch('wow_intelligence.rag.ingestion.ahledger.items.MAX_RESPONSE_BYTES', 2), self.assertRaises(ImportError):
             write_review_bundle(b"{} ", self.output, self.now)

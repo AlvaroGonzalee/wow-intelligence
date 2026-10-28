@@ -1,18 +1,21 @@
+from dataclasses import replace
+from pathlib import Path
 import copy
 import json
 import unittest
-from dataclasses import replace
-from pathlib import Path
 
-from wow_intelligence.ollama import INPUT_BUDGET, OllamaError, message_size
-from wow_intelligence.rag import load_corpus
-from wow_intelligence.rag.context import ABSTENTION, parse_answer, prepare_context
+from wow_intelligence.ollama.errors import OllamaError
+from wow_intelligence.ollama.messages import INPUT_BUDGET, message_size
+from wow_intelligence.rag.generation.answer_parser import parse_answer
+from wow_intelligence.rag.generation.context_builder import prepare_context
+from wow_intelligence.rag.generation.prompts import ABSTENTION
+from wow_intelligence.rag.storage.json_loader import load_knowledge_base
 
 
 class ContextTests(unittest.TestCase):
     # Prevent context truncation, invented references, and stale source reuse.
     def setUp(self):
-        self.evidence = load_corpus(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json").evidence[:2]
+        self.evidence = load_knowledge_base(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json").evidence[:2]
         self.history = [
             {"role": "system", "content": "No sources connected."},
             {"role": "user", "content": "Hello"},
@@ -69,7 +72,7 @@ class ContextTests(unittest.TestCase):
         self.assertIn("This answer is preliminary", answer.text)
         self.assertIn("may change", answer.text)
         self.assertIn("not independently verified", answer.sources_text())
-        from wow_intelligence.language import EnglishLanguagePolicy
+        from wow_intelligence.chat.policies.language import EnglishLanguagePolicy
         self.assertTrue(EnglishLanguagePolicy().is_english(answer.text))
         verified_answer = parse_answer(json.dumps({"statements": [
             {"text": "The violet token is in a green chest.", "evidence_ids": [self.evidence[1].evidence_id]},

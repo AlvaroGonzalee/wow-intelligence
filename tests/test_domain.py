@@ -1,6 +1,6 @@
 import unittest
 
-from wow_intelligence.domain import WoWDomainPolicy
+from wow_intelligence.chat.policies.domain import WoWDomainPolicy
 
 
 class WoWDomainPolicyTests(unittest.TestCase):

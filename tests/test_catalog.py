@@ -1,11 +1,14 @@
-import json
+from datetime import datetime, timezone
 from pathlib import Path
+import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
-from wow_intelligence.sources.catalog import parse_export, import_export
-from wow_intelligence.rag import load_corpus, RagPipeline
-from wow_intelligence.rag.context import parse_answer
+
+from wow_intelligence.rag.generation.answer_parser import parse_answer
+from wow_intelligence.rag.ingestion.ahledger.catalog import parse_export, import_export
+from wow_intelligence.rag.pipeline import RagPipeline
+from wow_intelligence.rag.storage.json_loader import load_knowledge_base
+
 
 RAW = b'''# Catalog
 > 1 items present in Forever (beta build 1.60.1 (build 70245))
@@ -46,15 +49,15 @@ class CatalogTests(unittest.TestCase):
             source.write_bytes(RAW)
             output = root / 'bundle'
             path = import_export(source, output, NOW)
-            corpus = load_corpus(path)
-            self.assertFalse(RagPipeline(corpus).retriever.evidence)
-            pipeline = RagPipeline(corpus, include_catalog=True)
+            knowledge_base = load_knowledge_base(path)
+            self.assertFalse(RagPipeline(knowledge_base).retriever.evidence)
+            pipeline = RagPipeline(knowledge_base, include_catalog=True)
             self.assertEqual(len(pipeline.retriever.evidence), 2)
             item = pipeline.retriever.search('Example Gloves')[0]
             self.assertEqual(item.evidence_id, 'ahledger-items-123')
             answer = parse_answer(json.dumps({'statements': [{'text': 'The catalog lists rare gloves.', 'evidence_ids': [item.evidence_id]}]}), (item,))
             self.assertIn('not independently verified', answer.text)
-            from wow_intelligence.language import EnglishLanguagePolicy
+            from wow_intelligence.chat.policies.language import EnglishLanguagePolicy
             self.assertTrue(EnglishLanguagePolicy().is_english(answer.text))
             self.assertIn('source_reported', answer.sources_text())
             self.assertEqual((output / 'raw.txt').read_bytes(), RAW)

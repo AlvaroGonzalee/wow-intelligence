@@ -2,38 +2,43 @@ from collections import Counter
 from pathlib import Path
 import re
 
-from wow_intelligence.ollama import Message
-from wow_intelligence.conversation import ConversationPolicy
-from .context import ABSTENTION, PreparedTurn, RagAnswer, answer_schema, parse_answer, prepare_context
-from .catalog_facts import catalog_answer, catalog_names
-from .corpus import Corpus
-from .retriever import Retriever
+from wow_intelligence.chat.policies.conversation import ConversationPolicy
+from wow_intelligence.ollama.messages import Message
+from wow_intelligence.rag.generation.answer_parser import parse_answer
+from wow_intelligence.rag.generation.catalog_answers import catalog_answer, catalog_names
+from wow_intelligence.rag.generation.context_builder import prepare_context
+from wow_intelligence.rag.generation.prompts import ABSTENTION
+from wow_intelligence.rag.generation.schema import answer_schema
+from wow_intelligence.rag.models.knowledge_base import KnowledgeBase
+from wow_intelligence.rag.models.prepared_turn import PreparedTurn
+from wow_intelligence.rag.models.rag_answer import RagAnswer
+from wow_intelligence.rag.retrieval.bm25 import BM25Retriever
 
 
 class RagPipeline:
-    # Own an immutable corpus snapshot and a build-specific lexical index.
-    def __init__(self, corpus: Corpus, game_build: str | None = None, *, include_catalog: bool = False,
+    # Coordinate retrieval, context preparation and cited answers for one build.
+    def __init__(self, knowledge_base: KnowledgeBase, game_build: str | None = None, *, include_catalog: bool = False,
                  index_path: Path | None = None, embedder=None) -> None:
         if game_build is None:
-            game_build = self.select_build(corpus)
+            game_build = self.select_build(knowledge_base)
         self.game_build = game_build
-        self.corpus = corpus
+        self.knowledge_base = knowledge_base
         self.include_catalog = include_catalog
-        self.retriever = Retriever(corpus, game_build, include_catalog=include_catalog)
+        self.retriever = BM25Retriever(knowledge_base, game_build, include_catalog=include_catalog)
         self.language_names = catalog_names(self.retriever.evidence)
         self.retrieval_mode = "bm25"
         if (index_path is None) != (embedder is None):
             raise ValueError("Hybrid retrieval requires both an index and an embedding model.")
         if index_path is not None:
-            from .hybrid import HybridRetriever
-            from .vectorstore import VectorIndex
+            from wow_intelligence.rag.retrieval.hybrid import HybridRetriever
+            from wow_intelligence.rag.indexing.vector_index import VectorIndex
             index = VectorIndex(index_path, self.retriever.evidence, embedder.identity)
             self.retriever = HybridRetriever(self.retriever, index, embedder)
             self.retrieval_mode = "hybrid"
 
     @staticmethod
-    def select_build(corpus: Corpus) -> str:
-        builds = {item.game_build for item in corpus.evidence
+    def select_build(knowledge_base: KnowledgeBase) -> str:
+        builds = {item.game_build for item in knowledge_base.evidence
                   if item.game_build and item.game_build.strip().casefold() != "unknown"}
         if len(builds) == 1:
             return next(iter(builds))
@@ -70,13 +75,13 @@ class RagPipeline:
         return parse_answer(generator(prepared.messages, response_schema=answer_schema(prepared.evidence)), prepared.evidence)
 
     def coverage_text(self) -> str:
-        builds = Counter(item.game_build or "unknown" for item in self.corpus.evidence)
-        statuses = Counter(item.status for item in self.corpus.evidence)
+        builds = Counter(item.game_build or "unknown" for item in self.knowledge_base.evidence)
+        statuses = Counter(item.status for item in self.knowledge_base.evidence)
         return "\n".join([
             f"Selected Forever build: {self.game_build}",
             f"Retrieval: {self.retrieval_mode}.",
             "Source catalog mode: " + ("enabled; not independently verified in game." if self.include_catalog else "disabled."),
-            f"Loaded sources: {len(self.corpus.sources)}; evidence records: {len(self.corpus.evidence)}.",
+            f"Loaded sources: {len(self.knowledge_base.sources)}; evidence records: {len(self.knowledge_base.evidence)}.",
             f"Eligible evidence: {len(self.retriever.evidence)}.",
             "Builds: " + (", ".join(f"{key}: {value}" for key, value in sorted(builds.items())) or "none"),
             "Review states: " + (", ".join(f"{key}: {value}" for key, value in sorted(statuses.items())) or "none"),

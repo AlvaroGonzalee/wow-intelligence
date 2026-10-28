@@ -1,27 +1,29 @@
+from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
+from pathlib import Path
+from unittest.mock import patch
 import io
 import json
 import unittest
-from dataclasses import replace
-from contextlib import redirect_stderr, redirect_stdout
-from pathlib import Path
-from unittest.mock import patch
 
-from wow_intelligence.chat import run_chat
-from wow_intelligence.rag import Corpus, RagPipeline, load_corpus
-from wow_intelligence.rag.context import ABSTENTION
+from wow_intelligence.chat.terminal import run_chat
+from wow_intelligence.rag.generation.prompts import ABSTENTION
+from wow_intelligence.rag.models.knowledge_base import KnowledgeBase
+from wow_intelligence.rag.pipeline import RagPipeline
+from wow_intelligence.rag.storage.json_loader import load_knowledge_base
 
 
 class RagChatTests(unittest.TestCase):
     # Cover real loading, retrieval, transport payloads, validation, and display.
     def setUp(self):
-        corpus = load_corpus(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json")
-        self.rag = RagPipeline(corpus, "test-build")
+        knowledge_base = load_knowledge_base(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json")
+        self.rag = RagPipeline(knowledge_base, "test-build")
         self.output = io.StringIO()
         self.enterContext(redirect_stdout(self.output))
         self.enterContext(redirect_stderr(io.StringIO()))
         self.input = self.enterContext(patch("builtins.input"))
-        self.http = self.enterContext(patch("wow_intelligence.ollama.urlopen"))
-        self.language = self.enterContext(patch("wow_intelligence.chat.EnglishLanguagePolicy")).return_value
+        self.http = self.enterContext(patch('wow_intelligence.ollama.client.urlopen'))
+        self.language = self.enterContext(patch('wow_intelligence.chat.terminal.EnglishLanguagePolicy')).return_value
         self.language.is_english.return_value = True
         self.language.output_rejection = "Non-English response blocked."
 
@@ -63,10 +65,10 @@ class RagChatTests(unittest.TestCase):
         self.assertIn("Which item, quest, class, or location", self.output.getvalue())
 
     def test_conflicting_catalog_records_never_call_the_model(self):
-        item = replace(self.rag.corpus.evidence[0], url="https://example.invalid/items/123-test",
+        item = replace(self.rag.knowledge_base.evidence[0], url="https://example.invalid/items/123-test",
                        content="Fictional items catalog reports name: Test Item; required level: 60; class: Armor;")
         conflict = replace(item, evidence_id="conflict", content=item.content.replace("level: 60", "level: 1"))
-        rag = RagPipeline(Corpus(self.rag.corpus.sources, (item, conflict)), "test-build")
+        rag = RagPipeline(KnowledgeBase(self.rag.knowledge_base.sources, (item, conflict)), "test-build")
         self.input.side_effect = ["What required level does Test Item have?", "/exit"]
         run_chat(rag=rag)
         self.http.assert_not_called()
@@ -105,7 +107,7 @@ class RagChatTests(unittest.TestCase):
         self.assertIn("Which item, quest, class, or location", self.output.getvalue())
 
     def test_wrong_build_abstains_without_calling_ollama(self):
-        self.rag = RagPipeline(load_corpus(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json"), "missing-build")
+        self.rag = RagPipeline(load_knowledge_base(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json"), "missing-build")
         self.input.side_effect = ["Where is the amber token?", "/exit"]
         run_chat(rag=self.rag)
         self.http.assert_not_called()

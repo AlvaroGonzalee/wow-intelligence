@@ -1,7 +1,7 @@
-import unittest
 from dataclasses import FrozenInstanceError
+import unittest
 
-from wow_intelligence.instructions import AssistantInstructions
+from wow_intelligence.chat.prompts import AssistantInstructions
 
 
 class AssistantInstructionsTests(unittest.TestCase):

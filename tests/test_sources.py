@@ -1,8 +1,9 @@
-import unittest
 from dataclasses import FrozenInstanceError, replace
 from datetime import datetime, timezone
+import unittest
 
-from wow_intelligence.sources import Evidence, Source
+from wow_intelligence.rag.models.evidence import Evidence
+from wow_intelligence.rag.models.source import Source
 
 
 class SourceTests(unittest.TestCase):

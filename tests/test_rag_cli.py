@@ -1,9 +1,9 @@
-import io
-import unittest
 from pathlib import Path
 from unittest.mock import patch
+import io
+import unittest
 
-from wow_intelligence.__main__ import main
+from wow_intelligence.cli.chat import main
 
 
 FIXTURE = str(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json")
@@ -12,7 +12,7 @@ FIXTURE = str(Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json
 class RagCliTests(unittest.TestCase):
     # Verify explicit mode selection and useful startup errors.
     def setUp(self):
-        self.chat = self.enterContext(patch("wow_intelligence.__main__.run_chat"))
+        self.chat = self.enterContext(patch('wow_intelligence.cli.chat.run_chat'))
         self.output = self.enterContext(patch("sys.stdout", new_callable=io.StringIO))
         self.errors = self.enterContext(patch("sys.stderr", new_callable=io.StringIO))
 
@@ -25,7 +25,7 @@ class RagCliTests(unittest.TestCase):
 
     def test_check_corpus_exits_without_loading_ollama_configuration_or_chat(self):
         with patch("sys.argv", ["wow-intelligence", "--corpus", FIXTURE, "--game-build", "test-build", "--check-corpus"]):
-            with patch("wow_intelligence.__main__.OllamaConfig.from_env") as config:
+            with patch("wow_intelligence.cli.chat.OllamaConfig.from_env") as config:
                 main()
                 config.assert_not_called()
         self.chat.assert_not_called()

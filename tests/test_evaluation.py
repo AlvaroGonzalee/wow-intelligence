@@ -1,14 +1,17 @@
+from pathlib import Path
+from unittest.mock import patch
 import copy
 import io
 import json
-from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
 
-from wow_intelligence.evaluation import evaluate, load_questions, main
-from wow_intelligence.ollama import OllamaError
-from wow_intelligence.rag import RagPipeline, load_corpus
+from wow_intelligence.cli.evaluate import main
+from wow_intelligence.ollama.errors import OllamaError
+from wow_intelligence.rag.evaluation.benchmark import evaluate
+from wow_intelligence.rag.evaluation.reference_questions import load_questions
+from wow_intelligence.rag.pipeline import RagPipeline
+from wow_intelligence.rag.storage.json_loader import load_knowledge_base
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json"
@@ -17,7 +20,7 @@ FIXTURE = Path(__file__).parent / "fixtures" / "rag_test_data_fictional.json"
 class EvaluationTests(unittest.TestCase):
     # Keep benchmark failures visible and separate retrieval scores from truth.
     def setUp(self):
-        self.pipeline = RagPipeline(load_corpus(FIXTURE), "test-build")
+        self.pipeline = RagPipeline(load_knowledge_base(FIXTURE), "test-build")
         self.suite = {
             "schema_version": 1, "name": "Fictional evaluation", "game_build": "test-build",
             "limitations": "Fictional test data, not real game knowledge.",
@@ -113,8 +116,8 @@ class EvaluationTests(unittest.TestCase):
             output = Path(folder) / "report.json"
             questions.write_text(json.dumps(self.suite))
             with patch("sys.argv", ["evaluation", "--corpus", str(FIXTURE), "--questions", str(questions), "--output", str(output)]):
-                with patch("wow_intelligence.evaluation.RagPipeline", return_value=self.pipeline):
-                    with patch("wow_intelligence.evaluation.OllamaConfig.from_env") as config:
+                with patch('wow_intelligence.cli.evaluate.RagPipeline', return_value=self.pipeline):
+                    with patch("wow_intelligence.cli.evaluate.OllamaConfig.from_env") as config:
                         with patch("sys.stdout", new_callable=io.StringIO):
                             main()
                         config.assert_not_called()

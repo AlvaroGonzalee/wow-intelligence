@@ -1,11 +1,11 @@
+from contextlib import redirect_stderr
+from unittest.mock import patch
 import io
 import os
 import unittest
-from contextlib import redirect_stderr
-from unittest.mock import patch
 
-from wow_intelligence.__main__ import main
-from wow_intelligence.config import OllamaConfig
+from wow_intelligence.cli.chat import main
+from wow_intelligence.config.ollama import OllamaConfig
 
 
 class OllamaConfigTests(unittest.TestCase):
@@ -57,14 +57,14 @@ class OllamaConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "OLLAMA_TIMEOUT"):
                     OllamaConfig.from_env({"OLLAMA_TIMEOUT": value})
 
-    @patch("wow_intelligence.__main__.run_chat")
+    @patch('wow_intelligence.cli.chat.run_chat')
     @patch("sys.argv", ["wow-intelligence"])
     @patch.dict(os.environ, {"OLLAMA_MODEL": "startup-model"}, clear=True)
     def test_startup_passes_configuration_to_chat(self, run_chat):
         main()
         run_chat.assert_called_once_with(OllamaConfig(model="startup-model"))
 
-    @patch("wow_intelligence.__main__.run_chat")
+    @patch('wow_intelligence.cli.chat.run_chat')
     @patch("sys.argv", ["wow-intelligence"])
     @patch.dict(os.environ, {"OLLAMA_TIMEOUT": "invalid"}, clear=True)
     def test_invalid_startup_settings_exit_before_chat(self, run_chat):
@@ -75,7 +75,7 @@ class OllamaConfigTests(unittest.TestCase):
         self.assertIn("OLLAMA_TIMEOUT", errors.getvalue())
         run_chat.assert_not_called()
 
-    @patch("wow_intelligence.__main__.run_chat")
+    @patch('wow_intelligence.cli.chat.run_chat')
     def test_help_and_version_work_with_invalid_configuration(self, run_chat):
         for argument in ("--help", "--version"):
             with self.subTest(argument=argument), patch("sys.argv", ["wow-intelligence", argument]):
