@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from wow_intelligence.ollama import INPUT_BUDGET, Message, OllamaError, message_size
 from wow_intelligence.sources import Evidence
+from .conflicts import CONFLICT_NOTICE, catalog_conflict
 
 
 ABSTENTION = "I don't have enough information in the available WoW Forever sources to answer this question."
@@ -49,6 +50,8 @@ class PreparedTurn:
     # Pair a temporary model request with exactly the evidence it can cite.
     messages: list[Message]
     evidence: tuple[Evidence, ...]
+    notice: str | None = None
+    ranked_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,8 @@ class RagAnswer:
     # Separate English answer text from citations rendered by the application.
     text: str
     evidence: tuple[Evidence, ...] = ()
+    validation_text: str | None = None
+    method: str = "model"
 
     def sources_text(self) -> str:
         if not self.evidence:
@@ -71,6 +76,8 @@ def prepare_context(history: list[Message], query: str, candidates: tuple[Eviden
     dialogue = [dict(message) for message in history if message["role"] != "system"]
     prefix: list[Message] = [{"role": "system", "content": RAG_INSTRUCTIONS}, *dialogue]
     question: Message = {"role": "user", "content": query}
+    if catalog_conflict(candidates):
+        return PreparedTurn([*prefix, question], (), CONFLICT_NOTICE, tuple(item.evidence_id for item in candidates))
     selected = []
     records = []
     messages = [*prefix, question]
@@ -90,9 +97,9 @@ def prepare_context(history: list[Message], query: str, candidates: tuple[Eviden
     if candidates and not selected:
         raise OllamaError(
             "Retrieved evidence does not fit the current context budget. "
-            "No history or excerpts were truncated. Start a new session or use shorter reviewed excerpts."
+            "No history or excerpts were truncated. Use /clear, start a new session, or use shorter reviewed excerpts."
         )
-    return PreparedTurn(messages, tuple(selected))
+    return PreparedTurn(messages, tuple(selected), ranked_ids=tuple(item.evidence_id for item in candidates))
 
 
 def parse_answer(raw: str, evidence: tuple[Evidence, ...]) -> RagAnswer:
@@ -114,6 +121,7 @@ def parse_answer(raw: str, evidence: tuple[Evidence, ...]) -> RagAnswer:
         available = {item.evidence_id: item for item in evidence}
         cited: list[Evidence] = []
         lines = []
+        validation_lines = []
         for statement in statements:
             if not isinstance(statement, dict) or set(statement) != {"text", "evidence_ids"}:
                 raise ValueError
@@ -133,9 +141,10 @@ def parse_answer(raw: str, evidence: tuple[Evidence, ...]) -> RagAnswer:
                     cited.append(item)
                 markers.append(f"[{cited.index(item) + 1}]")
             lines.append(text.strip() + " " + " ".join(markers))
+            validation_lines.append(text.strip())
         if lines and any(item.status == "source_reported" for item in cited):
             lines.insert(0, "This answer is preliminary and based on a source catalog. The information is not independently verified in game and may change as more Forever information becomes available.")
-        return RagAnswer("\n".join(lines), tuple(cited)) if lines else RagAnswer(ABSTENTION)
+        return RagAnswer("\n".join(lines), tuple(cited), "\n".join(validation_lines)) if lines else RagAnswer(ABSTENTION, method="abstention")
     except (ValueError, TypeError, RecursionError) as exc:
         raise OllamaError(
             "The model returned invalid or missing evidence citations. "

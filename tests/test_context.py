@@ -87,6 +87,25 @@ class ContextTests(unittest.TestCase):
         self.assertEqual(answer.text, ABSTENTION)
         self.assertEqual(answer.evidence, ())
 
+    def test_conflicting_catalog_fields_block_generation_context(self):
+        item = replace(self.evidence[0], url="https://example.invalid/items/123-test",
+                       content="Fictional items catalog reports name: Test Item; required level: 60; class: Armor;")
+        conflict = replace(item, evidence_id="conflict", content=item.content.replace("level: 60", "level: 1"))
+        prepared = prepare_context([], "What level does Test Item require?", (item, conflict))
+        self.assertFalse(prepared.evidence)
+        self.assertIn("sources disagree", prepared.notice)
+        self.assertNotIn("required level", str(prepared.messages))
+
+    def test_unknown_fields_and_distinct_item_ids_do_not_create_false_conflicts(self):
+        item = replace(self.evidence[0], url="https://example.invalid/items/123-test",
+                       content="Fictional items catalog reports name: Test Item; required level: 60; class: Armor;")
+        other = replace(item, evidence_id="other", url="https://example.invalid/items/456-other",
+                        content=item.content.replace("level: 60", "level: 1"))
+        unknown = replace(item, evidence_id="unknown", content=item.content.replace("level: 60", "level: unknown"))
+        prepared = prepare_context([], "What level does Test Item require?", (item, other, unknown))
+        self.assertIsNone(prepared.notice)
+        self.assertEqual(len(prepared.evidence), 3)
+
     def test_rejects_unstructured_output_and_duplicate_json_keys(self):
         for raw in ("Here is an answer.", '[]', '{"statements":null}',
                     '{"statements":[],"extra":true}', '{"statements":[],"statements":[]}'):

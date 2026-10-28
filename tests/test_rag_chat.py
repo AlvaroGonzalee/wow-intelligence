@@ -1,12 +1,13 @@
 import io
 import json
 import unittest
+from dataclasses import replace
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
 from wow_intelligence.chat import run_chat
-from wow_intelligence.rag import RagPipeline, load_corpus
+from wow_intelligence.rag import Corpus, RagPipeline, load_corpus
 from wow_intelligence.rag.context import ABSTENTION
 
 
@@ -51,6 +52,25 @@ class RagChatTests(unittest.TestCase):
         self.http.assert_not_called()
         self.assertIn(ABSTENTION, self.output.getvalue())
         self.assertIn("No sources were cited", self.output.getvalue())
+
+    def test_clear_discards_history_citations_and_followup_subject(self):
+        self.input.side_effect = ["Where is the amber token?", "/clear", "/sources", "Where is it?", "/exit"]
+        self.http.return_value = self.response()
+        run_chat(rag=self.rag)
+        self.http.assert_called_once()
+        self.assertIn("Conversation cleared.", self.output.getvalue())
+        self.assertIn("No sources were cited", self.output.getvalue())
+        self.assertIn("Which item, quest, class, or location", self.output.getvalue())
+
+    def test_conflicting_catalog_records_never_call_the_model(self):
+        item = replace(self.rag.corpus.evidence[0], url="https://example.invalid/items/123-test",
+                       content="Fictional items catalog reports name: Test Item; required level: 60; class: Armor;")
+        conflict = replace(item, evidence_id="conflict", content=item.content.replace("level: 60", "level: 1"))
+        rag = RagPipeline(Corpus(self.rag.corpus.sources, (item, conflict)), "test-build")
+        self.input.side_effect = ["What required level does Test Item have?", "/exit"]
+        run_chat(rag=rag)
+        self.http.assert_not_called()
+        self.assertIn("sources disagree", self.output.getvalue())
 
     def test_greeting_and_thanks_work_without_retrieval_or_model_calls(self):
         self.input.side_effect = ["hello", "thanks", "/coverage", "/exit"]

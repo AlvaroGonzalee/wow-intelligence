@@ -1,4 +1,11 @@
 from lingua import Language, LanguageDetectorBuilder
+from functools import lru_cache
+import re
+
+
+@lru_cache(maxsize=8)
+def _name_pattern(names: tuple[str, ...]):
+    return re.compile(r"(?<!\w)(?:" + "|".join(re.escape(name) for name in sorted(names, key=len, reverse=True)) + r")(?!\w)", re.IGNORECASE)
 
 
 class EnglishLanguagePolicy:
@@ -16,7 +23,11 @@ class EnglishLanguagePolicy:
             .build()
         )
 
-    def is_english(self, text: str) -> bool:
+    def is_english(self, text: str, *, known_names: tuple[str, ...] = ()) -> bool:
+        if known_names:
+            if self.is_english(text):
+                return True
+            text = _name_pattern(known_names).sub("the named game entity", text)
         normalized = text.strip(" \t\r\n.!?").casefold()
         if normalized in {
             "hello", "hi", "hey", "good morning", "good afternoon", "good evening",

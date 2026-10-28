@@ -27,6 +27,7 @@ class RetrieverTests(unittest.TestCase):
         original = self.corpus.evidence[0]
         for item in (
             replace(original, source=replace(original.source, enabled=False)),
+            replace(original, language="es"),
             replace(original, source=replace(original.source, enabled=False, permission_status="pending_review")),
             *[replace(original, status=status) for status in ("unknown", "unverified_for_forever", "superseded", "withheld")],
         ):

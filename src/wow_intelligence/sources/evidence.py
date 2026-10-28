@@ -23,9 +23,10 @@ class Evidence:
     game_build: str | None = None
     status: EvidenceStatus = "unknown"
     verified_at: datetime | None = None
+    language: str = "en"
 
     def __post_init__(self) -> None:
-        for field in ("evidence_id", "content", "game_version"):
+        for field in ("evidence_id", "content", "game_version", "language"):
             _require_text(getattr(self, field), field)
         if not isinstance(self.source, Source):
             raise ValueError("Evidence must reference a Source object.")
@@ -56,5 +57,6 @@ class Evidence:
             and (self.status == "verified_for_forever" or (include_catalog and self.status == "source_reported"))
             and self.game_version == "forever"
             and self.game_version == game_version
+            and self.language == "en"
             and self.game_build == game_build
         )

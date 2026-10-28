@@ -36,6 +36,8 @@ class RagCliTests(unittest.TestCase):
             ["--corpus", FIXTURE], ["--game-build", "test-build"], ["--check-corpus"],
             ["--corpus", FIXTURE, "--game-build", "unknown"],
             ["--corpus", "/does-not-exist/corpus.json", "--game-build", "test-build"],
+            ["--index", "missing.sqlite3"], ["--embedding-model", "test"],
+            ["--index", "missing.sqlite3", "--embedding-model", "test"],
         ):
             with self.subTest(arguments=arguments), patch("sys.argv", ["wow-intelligence", *arguments]):
                 with self.assertRaises(SystemExit) as raised:

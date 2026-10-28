@@ -8,7 +8,8 @@ from wow_intelligence.instructions import AssistantInstructions
 from wow_intelligence.language import EnglishLanguagePolicy
 from wow_intelligence.ollama import Message, OllamaError, generate
 from wow_intelligence.rag import RagPipeline
-from wow_intelligence.rag.context import ABSTENTION, RagAnswer, answer_schema, parse_answer
+from wow_intelligence.rag.context import ABSTENTION, RagAnswer
+from wow_intelligence.rag.catalog_facts import catalog_names
 
 
 def run_chat(config: OllamaConfig | None = None, *, rag: RagPipeline | None = None) -> None:
@@ -42,6 +43,7 @@ def run_chat(config: OllamaConfig | None = None, *, rag: RagPipeline | None = No
                 print("/help — Show this help.")
                 print("/version — Show the application version.")
                 print("/exit — End the session and discard its history.")
+                print("/clear — Clear the conversation and start a new topic.")
                 if rag is not None:
                     print("/sources — Show citations from the last accepted answer.")
                     print("/coverage — Show loaded evidence and build coverage.")
@@ -50,6 +52,12 @@ def run_chat(config: OllamaConfig | None = None, *, rag: RagPipeline | None = No
                     print("Answers are not verified against sources.")
                 else:
                     print("Name the subject of your question. Follow-ups can use the previous topic.")
+                continue
+            if prompt == "/clear":
+                history = [AssistantInstructions().system_message()]
+                last_rag_answer = RagAnswer(ABSTENTION)
+                rag_topic_available = False
+                print("Conversation cleared.")
                 continue
             if prompt == "/version":
                 print(f"WoW Intelligence {version('wow-intelligence')}")
@@ -63,7 +71,7 @@ def run_chat(config: OllamaConfig | None = None, *, rag: RagPipeline | None = No
             if prompt.startswith("/"):
                 print("Unknown command. Type /help for available commands.")
                 continue
-            if not language_policy.is_english(prompt):
+            if not language_policy.is_english(prompt, **({"known_names": rag.language_names} if rag else {})):
                 rag_topic_available = False
                 print(language_policy.input_rejection)
                 continue
@@ -90,22 +98,25 @@ def run_chat(config: OllamaConfig | None = None, *, rag: RagPipeline | None = No
                 prepared = rag.prepare(history, prompt) if rag is not None else None
                 if prepared is not None and not prepared.evidence:
                     rag_topic_available = False
-                    last_rag_answer = RagAnswer(ABSTENTION)
-                    print(f"Assistant: {ABSTENTION}")
+                    last_rag_answer = RagAnswer(prepared.notice or ABSTENTION)
+                    print(f"Assistant: {last_rag_answer.text}")
                     continue
-                answer = generate(
-                    prepared.messages if prepared is not None else messages, model=config.model,
-                    base_url=config.base_url, timeout=config.timeout,
-                    **({"response_schema": answer_schema(prepared.evidence)} if prepared is not None else {}),
-                )
-                rag_answer = parse_answer(answer, prepared.evidence) if prepared is not None else None
-                if rag_answer is not None:
+                if rag is not None:
+                    def configured_generate(request, *, response_schema):
+                        return generate(request, model=config.model, base_url=config.base_url,
+                                        timeout=config.timeout, response_schema=response_schema)
+                    rag_answer = rag.answer(prepared, prompt, generator=configured_generate)
                     answer = rag_answer.text
+                else:
+                    rag_answer = None
+                    answer = generate(messages, model=config.model, base_url=config.base_url, timeout=config.timeout)
             except OllamaError as exc:
                 rag_topic_available = False
                 print(f"Error: {exc}", file=sys.stderr)
                 continue
-            if not language_policy.is_english(answer):
+            validation_text = (rag_answer.validation_text or answer) if rag_answer else answer
+            names = catalog_names(rag_answer.evidence) if rag_answer else ()
+            if not language_policy.is_english(validation_text, **({"known_names": names} if names else {})):
                 rag_topic_available = False
                 print(language_policy.output_rejection)
                 continue
