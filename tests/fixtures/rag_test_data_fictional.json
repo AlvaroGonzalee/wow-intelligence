@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "source_id": "synthetic",
+      "name": "Synthetic test fixture - not real game knowledge",
+      "url": "https://example.invalid/synthetic",
+      "game_version": "forever",
+      "permission_status": "approved",
+      "permission_reference": "Fictional test data authored for automated tests only.",
+      "enabled": true
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "amber-token",
+      "source_id": "synthetic",
+      "url": "https://example.invalid/synthetic/amber",
+      "content": "Synthetic test only: the amber token is stored in a blue chest.",
+      "game_version": "forever",
+      "game_build": "test-build",
+      "retrieved_at": "2026-01-01T00:00:00+00:00",
+      "status": "verified_for_forever",
+      "verified_at": "2026-01-02T00:00:00+00:00"
+    },
+    {
+      "evidence_id": "violet-token",
+      "source_id": "synthetic",
+      "url": "https://example.invalid/synthetic/violet",
+      "content": "Synthetic test only: the violet token is stored in a green chest.",
+      "game_version": "forever",
+      "game_build": "test-build",
+      "retrieved_at": "2026-01-01T00:00:00+00:00",
+      "status": "verified_for_forever",
+      "verified_at": "2026-01-02T00:00:00+00:00"
+    },
+    {
+      "evidence_id": "amber-other-build",
+      "source_id": "synthetic",
+      "url": "https://example.invalid/synthetic/other",
+      "content": "Synthetic test only: the amber token is stored in a red chest.",
+      "game_version": "forever",
+      "game_build": "other-test-build",
+      "retrieved_at": "2026-01-01T00:00:00+00:00",
+      "status": "verified_for_forever",
+      "verified_at": "2026-01-02T00:00:00+00:00"
+    }
+  ]
+}
